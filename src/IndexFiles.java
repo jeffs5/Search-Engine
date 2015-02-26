@@ -25,6 +25,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Enumeration;
+import java.util.Scanner;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -160,67 +161,121 @@ public class IndexFiles {
 						indexDocs(writer, new File(file, files[i]));
 					}
 				}
-			} else if(file.getName().toLowerCase().endsWith(".zip")) {
+			} else if(file.getName().toLowerCase().endsWith(".zip") && !file.getName().contains("H")) {
 				//for each file in the zip, add it to the index
 				ZipFile zf = new ZipFile(file);
 				Enumeration<? extends ZipEntry> entries = zf.entries();
 				while(entries.hasMoreElements())
 				{
 					InputStream fis;
-					try {
-						//fis = new FileInputStream(file);
-						fis = zf.getInputStream(entries.nextElement());
-					} catch (FileNotFoundException fnfe) {
-						// at least on windows, some temporary files raise this exception with an "access denied" message
-						// checking if the file can be read doesn't help
-						return;
-					}
+					ZipEntry element = entries.nextElement();
+					if(element.getName().endsWith(".txt"))
+					{
+						try {
+							//fis = new FileInputStream(file);
 
-					try {
-
-						// make a new, empty document
-						Document doc = new Document();
-
-						// Add the path of the file as a field named "path".  Use a
-						// field that is indexed (i.e. searchable), but don't tokenize 
-						// the field into separate words and don't index term frequency
-						// or positional information:
-						Field pathField = new StringField("path", file.getPath(), Field.Store.YES);
-						doc.add(pathField);
-
-						// Add the last modified date of the file a field named "modified".
-						// Use a LongField that is indexed (i.e. efficiently filterable with
-						// NumericRangeFilter).  This indexes to milli-second resolution, which
-						// is often too fine.  You could instead create a number based on
-						// year/month/day/hour/minutes/seconds, down the resolution you require.
-						// For example the long value 2011021714 would mean
-						// February 17, 2011, 2-3 PM.
-						doc.add(new LongField("modified", file.lastModified(), Field.Store.NO));
-
-						// Add the contents of the file to a field named "contents".  Specify a Reader,
-						// so that the text of the file is tokenized and indexed, but not stored.
-						// Note that FileReader expects the file to be in UTF-8 encoding.
-						// If that's not the case searching for special characters will fail.
-						doc.add(new TextField("contents", new BufferedReader(new InputStreamReader(fis, StandardCharsets.UTF_8))));
-
-						if (writer.getConfig().getOpenMode() == OpenMode.CREATE) {
-							// New index, so we just add the document (no old document can be there):
-							System.out.println("adding " + file);
-							writer.addDocument(doc);
-						} else {
-							// Existing index (an old copy of this document may have been indexed) so 
-							// we use updateDocument instead to replace the old one matching the exact 
-							// path, if present:
-							System.out.println("updating " + file);
-							writer.updateDocument(new Term("path", file.getPath()), doc);
+							fis = zf.getInputStream(element);
+						} catch (FileNotFoundException fnfe) {
+							// at least on windows, some temporary files raise this exception with an "access denied" message
+							// checking if the file can be read doesn't help
+							return;
 						}
 
-					} finally {
-						fis.close();
+						try {
+
+							// make a new, empty document
+							Document doc = new Document();
+
+							// Add the path of the file as a field named "path".  Use a
+							// field that is indexed (i.e. searchable), but don't tokenize 
+							// the field into separate words and don't index term frequency
+							// or positional information:
+							Field pathField = new StringField("path", file.getPath(), Field.Store.YES);
+							doc.add(pathField);
+
+							// Add the last modified date of the file a field named "modified".
+							// Use a LongField that is indexed (i.e. efficiently filterable with
+							// NumericRangeFilter).  This indexes to milli-second resolution, which
+							// is often too fine.  You could instead create a number based on
+							// year/month/day/hour/minutes/seconds, down the resolution you require.
+							// For example the long value 2011021714 would mean
+							// February 17, 2011, 2-3 PM.
+							doc.add(new LongField("modified", file.lastModified(), Field.Store.NO));
+
+							// Add the contents of the file to a field named "contents".  Specify a Reader,
+							// so that the text of the file is tokenized and indexed, but not stored.
+							// Note that FileReader expects the file to be in UTF-8 encoding.
+							// If that's not the case searching for special characters will fail.
+							doc.add(new TextField("contents", new BufferedReader(new InputStreamReader(fis, StandardCharsets.UTF_8))));
+
+							// Add the contents of the file to a field named "title".
+							String title = "";
+							BufferedReader br = new BufferedReader(new InputStreamReader(fis, StandardCharsets.UTF_8));
+							System.out.println(file.getName());
+							while(!title.contains("Title:"))
+							{
+								title = br.readLine();
+								if(title == null)
+									break;
+							}
+							if(title == null)
+								continue;
+							//checks to see if title is on another line or not
+							String next = br.readLine();
+							while(!next.isEmpty())
+							{
+								title += " " + next ;
+								next = br.readLine();
+							}
+
+							doc.add(new StringField("title", getTitle(title), Field.Store.YES));
+							next = br.readLine();
+							while(next.isEmpty())
+							{
+								next = br.readLine();
+							}
+							String author = next;
+							doc.add(new StringField("author", getAuthor(author), Field.Store.YES));
+
+							if (writer.getConfig().getOpenMode() == OpenMode.CREATE) {
+								// New index, so we just add the document (no old document can be there):
+								System.out.println("adding " + file);
+								writer.addDocument(doc);
+							} else {
+								// Existing index (an old copy of this document may have been indexed) so 
+								// we use updateDocument instead to replace the old one matching the exact 
+								// path, if present:
+								System.out.println("updating " + file);
+								writer.updateDocument(new Term("path", file.getPath()), doc);
+							}
+
+						} finally {
+							fis.close();
+						}
 					}
 				}
 				zf.close();
 			}
 		}
+	}
+
+	private static String getTitle(String line)
+	{
+		Scanner s = new Scanner(line);
+		s.useDelimiter("Title: ");
+		String title = s.next();
+		System.out.println(title);
+		s.close();
+		return title;
+	}
+
+	private static String getAuthor(String line)
+	{
+		Scanner s = new Scanner(line);
+		s.useDelimiter("Author: ");
+		String author = s.next();
+		System.out.println(author);
+		s.close();
+		return author;
 	}
 }

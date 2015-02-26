@@ -188,6 +188,10 @@ public class SearchFiles {
           if (title != null) {
             System.out.println("   Title: " + doc.get("title"));
           }
+          String author = doc.get("author");
+          if (author != null) {
+            System.out.println("   Author: " + doc.get("author"));
+          }
         } else {
           System.out.println((i+1) + ". " + "No path for this document");
         }
